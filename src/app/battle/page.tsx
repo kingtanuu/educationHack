@@ -62,6 +62,9 @@ export default function BattlePage() {
   const beginRun = useRunStore((s) => s.beginRun);
   const tutorialComplete = useRunStore((s) => s.tutorialComplete);
   const floorsCleared = useRunStore((s) => s.floorsCleared);
+  const runHp = useRunStore((s) => s.playerHp);
+  const runMaxHp = useRunStore((s) => s.playerMaxHp);
+  const setRunHp = useRunStore((s) => s.setPlayerHp);
 
   const [enemyNumbers, setEnemyNumbers] = useState<FloatingNumber[]>([]);
   const [playerNumbers, setPlayerNumbers] = useState<FloatingNumber[]>([]);
@@ -73,9 +76,9 @@ export default function BattlePage() {
 
   useEffect(() => {
     if (status === "idle") {
-      startBattle("acid-slime", snapshotDeck());
+      startBattle("acid-slime", snapshotDeck(), runHp, runMaxHp);
     }
-  }, [status, startBattle, snapshotDeck]);
+  }, [status, startBattle, snapshotDeck, runHp, runMaxHp]);
 
   // Compute synergy hints whenever the hand or crucible changes.
   const synergyKeys = (() => {
@@ -197,13 +200,18 @@ export default function BattlePage() {
     const prev = prevStatusRef.current;
     if (prev !== "victory" && status === "victory") {
       sfx.play("victory");
+      // Save the HP the player ended the battle at first; recordVictory
+      // then heals 25% of max on top of that.
+      setRunHp(playerHp);
       recordVictory();
     }
     if (prev !== "defeat" && status === "defeat") {
       sfx.play("defeat");
+      // Defeat reflects 0 HP back to the run; beginRun will reset it.
+      setRunHp(0);
     }
     prevStatusRef.current = status;
-  }, [status, recordVictory]);
+  }, [status, recordVictory, setRunHp, playerHp]);
 
   const removeEnemyNumber = useCallback(
     (id: string) =>
@@ -382,8 +390,12 @@ export default function BattlePage() {
                   : `${enemy.name} に倒された。`}
               </p>
               {status === "victory" && (
-                <div className="mt-3 rounded-lg border border-amber-700/60 bg-amber-950/40 px-3 py-2 text-xs text-amber-200">
-                  デッキは引き継がれる — 使ったカードもまた山札に戻ってくる
+                <div className="mt-3 space-y-1 rounded-lg border border-amber-700/60 bg-amber-950/40 px-3 py-2 text-xs text-amber-200">
+                  <div>デッキは引き継がれる — 使ったカードも山札に戻る</div>
+                  <div>
+                    HP {runHp} / {runMaxHp}（勝利ボーナスで{" "}
+                    {Math.round(runMaxHp * 0.25)} 回復済み）
+                  </div>
                 </div>
               )}
               <div className="mt-6 flex justify-center gap-3">
@@ -392,8 +404,24 @@ export default function BattlePage() {
                   onClick={() => {
                     if (status === "defeat") {
                       beginRun();
+                      // Re-read fresh values after beginRun mutates state.
+                      const fresh = useRunStore.getState();
+                      startBattle(
+                        "acid-slime",
+                        fresh.snapshotDeck(),
+                        fresh.playerHp,
+                        fresh.playerMaxHp,
+                      );
+                    } else {
+                      // Victory: carry over current HP from runStore (just healed).
+                      const fresh = useRunStore.getState();
+                      startBattle(
+                        "acid-slime",
+                        fresh.snapshotDeck(),
+                        fresh.playerHp,
+                        fresh.playerMaxHp,
+                      );
                     }
-                    startBattle("acid-slime", snapshotDeck());
                   }}
                   className="inline-flex items-center gap-1 rounded-full bg-amber-600 px-4 py-2 text-sm font-bold text-amber-50 hover:bg-amber-500"
                 >

@@ -79,7 +79,12 @@ export interface BattleState {
   /** Most recent reaction outcome, used for "効果は抜群だ!" banner. */
   lastFx: LastReactionFx | null;
 
-  startBattle: (enemyId: string, deck: CardDef[]) => void;
+  startBattle: (
+    enemyId: string,
+    deck: CardDef[],
+    initialHp?: number,
+    maxHp?: number,
+  ) => void;
   moveToPlayArea: (cardId: string) => void;
   returnFromPlayArea: (cardId: string) => void;
   resolveReaction: () => ResolveResult | null;
@@ -135,11 +140,16 @@ export const useBattleStore = create<BattleState>((set, get) => ({
   enemyStatus: [],
   lastFx: null,
 
-  startBattle: (enemyId, deck) => {
+  startBattle: (enemyId, deck, initialHp, maxHp) => {
     const enemy = getEnemy(enemyId);
     if (!enemy) {
       return;
     }
+    const resolvedMax = maxHp ?? PLAYER_MAX_HP;
+    const resolvedHp = Math.max(
+      1,
+      Math.min(initialHp ?? resolvedMax, resolvedMax),
+    );
 
     // Re-shuffle until the opening hand contains at least one reachable
     // reaction. Keeps the tutorial moment from feeling random/dead.
@@ -160,8 +170,8 @@ export const useBattleStore = create<BattleState>((set, get) => ({
       enemy,
       enemyHp: enemy.maxHp,
       enemyIntentIndex: 0,
-      playerHp: PLAYER_MAX_HP,
-      playerMaxHp: PLAYER_MAX_HP,
+      playerHp: resolvedHp,
+      playerMaxHp: resolvedMax,
       playerBlock: 0,
       playerEnergy: MAX_ENERGY,
       playerMaxEnergy: MAX_ENERGY,

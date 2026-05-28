@@ -56,10 +56,10 @@ export default function TitlePage() {
           </Link>
           <Link
             href="/codex"
-            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-stone-700 bg-stone-900/60 px-8 py-3 font-display text-base text-ink-secondary transition hover:border-amber-700/60 hover:text-amber-200"
+            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-stone-700 bg-stone-900/60 px-8 py-3 font-display text-base text-ink-secondary transition hover:border-amber-500/70 hover:bg-stone-900/80 hover:text-amber-200"
           >
             <ScrollText size={18} />
-            反応の書 (準備中)
+            反応の書
           </Link>
         </div>
 
