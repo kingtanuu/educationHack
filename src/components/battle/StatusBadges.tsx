@@ -25,6 +25,11 @@ const META: Record<
     label: "麻痺",
     tint: "border-purple-500 bg-purple-900/70 text-purple-100",
   },
+  dazzle: {
+    icon: "✨",
+    label: "目眩し",
+    tint: "border-yellow-300 bg-yellow-700/70 text-yellow-50",
+  },
   "block-buff": {
     icon: "🛡",
     label: "強化",

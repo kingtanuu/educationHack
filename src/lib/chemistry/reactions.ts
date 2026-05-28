@@ -23,6 +23,7 @@ export type StatusEffectKind =
   | "poison"
   | "paralyze"
   | "burn"
+  | "dazzle"
   | "block-buff";
 
 export interface AppliedStatusEffect {
@@ -80,10 +81,12 @@ export const REACTIONS: ReactionDef[] = [
       damage: 28,
       produces: ["NaCl"],
       effect: "spark",
+      // 発熱反応で軽い炎が広がる
+      statusEffects: [{ kind: "burn", value: 2, duration: 2 }],
     },
     priority: 10,
     educationalNote:
-      "ナトリウムは塩素と激しく反応してイオン結合の塩化ナトリウム(食塩)を作る。",
+      "ナトリウムは塩素と激しく反応してイオン結合の塩化ナトリウム(食塩)を作る。発熱量が大きく軽い火花を残す。",
   },
   {
     id: "neutr-hcl-naoh",
@@ -131,11 +134,15 @@ export const REACTIONS: ReactionDef[] = [
       damage: 30,
       produces: ["MgO"],
       effect: "spark",
-      statusEffects: [{ kind: "burn", value: 3, duration: 2 }],
+      // 強烈な閃光 → 目眩し、白煙 → 燃焼
+      statusEffects: [
+        { kind: "burn", value: 3, duration: 2 },
+        { kind: "dazzle", value: 1, duration: 2 },
+      ],
     },
     priority: 25,
     educationalNote:
-      "マグネシウムは強い閃光を放って燃え白い酸化マグネシウム(塩基性酸化物)になる。",
+      "マグネシウムは強い閃光を放って燃え白い酸化マグネシウム(塩基性酸化物)になる。眩い光が敵を目眩しにする。",
   },
   {
     id: "gas-zn-hcl",
@@ -148,10 +155,12 @@ export const REACTIONS: ReactionDef[] = [
       damage: 18,
       produces: ["H2"],
       effect: "fizz",
+      // 発熱を伴う気体発生で軽い燃焼
+      statusEffects: [{ kind: "burn", value: 2, duration: 2 }],
     },
     priority: 15,
     educationalNote:
-      "イオン化傾向 Zn > H なので塩酸と反応して水素ガスを発生する代表的気体発生反応。",
+      "イオン化傾向 Zn > H なので塩酸と反応して水素ガスを発生する代表的気体発生反応。発熱で敵が焦げる。",
   },
   {
     id: "gas-fe-hcl",
@@ -164,6 +173,7 @@ export const REACTIONS: ReactionDef[] = [
       damage: 16,
       produces: ["H2"],
       effect: "fizz",
+      statusEffects: [{ kind: "burn", value: 2, duration: 2 }],
     },
     priority: 12,
     educationalNote:
@@ -218,10 +228,12 @@ export const REACTIONS: ReactionDef[] = [
       damage: 50,
       produces: ["NH3"],
       effect: "smoke",
+      // 発生するアンモニアは刺激性で毒
+      statusEffects: [{ kind: "poison", value: 5, duration: 3 }],
     },
     priority: 35,
     educationalNote:
-      "窒素と水素から高温高圧と触媒(鉄)でアンモニア合成。20世紀最大の化学発明。",
+      "窒素と水素から高温高圧と触媒(鉄)でアンモニア合成。20世紀最大の化学発明。刺激性の NH₃ が敵を蝕む。",
   },
   {
     id: "synth-h2o",
@@ -238,6 +250,90 @@ export const REACTIONS: ReactionDef[] = [
     priority: 5,
     educationalNote:
       "水素と酸素から水ができる基本反応。点火しなければ常温では遅い。",
+  },
+  {
+    id: "combust-s",
+    name: "硫黄の燃焼",
+    formula: "S + O_2 \\to SO_2",
+    type: "combustion",
+    ph: "acid",
+    requires: { elements: { S: 1, O: 1 }, conditions: ["cond-ignite"] },
+    outcome: {
+      damage: 26,
+      produces: ["SO2"],
+      effect: "smoke",
+      // 二酸化硫黄は刺激性の有毒ガス＋燃焼の炎
+      statusEffects: [
+        { kind: "poison", value: 4, duration: 3 },
+        { kind: "burn", value: 2, duration: 2 },
+      ],
+    },
+    priority: 24,
+    educationalNote:
+      "硫黄を燃やすと二酸化硫黄が発生する。SO₂ は刺激性の有毒ガスで酸性雨の原因物質でもある。",
+  },
+  {
+    id: "react-na-water",
+    name: "ナトリウムと水",
+    formula: "2Na + 2H_2O \\to 2NaOH + H_2 \\uparrow",
+    type: "displacement",
+    ph: "base",
+    requires: { elements: { Na: 1, O: 1, H: 1 } },
+    outcome: {
+      damage: 32,
+      produces: ["NaOH", "H2"],
+      effect: "fire",
+      // 激しい発熱で水素が燃え、生成した NaOH が腐食性
+      statusEffects: [
+        { kind: "burn", value: 4, duration: 2 },
+        { kind: "poison", value: 2, duration: 3 },
+      ],
+    },
+    priority: 28,
+    educationalNote:
+      "アルカリ金属は水と激しく反応する。発生した水素ガスが反応熱で発火し、苛性ソーダの腐食が継続。",
+  },
+  {
+    id: "neutr-nh3-hcl",
+    name: "アンモニアと塩酸の反応",
+    formula: "NH_3 + HCl \\to NH_4Cl",
+    type: "neutralization",
+    ph: "neutral",
+    requires: { elements: { NH3: 1, HCl: 1 } },
+    outcome: {
+      damage: 18,
+      produces: ["NH4Cl"],
+      effect: "smoke",
+      // 白煙で視界が遮られて麻痺
+      statusEffects: [{ kind: "paralyze", value: 1, duration: 1 }],
+    },
+    priority: 19,
+    educationalNote:
+      "気体のアンモニアと塩化水素が出会うと白い煙(塩化アンモニウム)が立ち昇る。煙幕で敵が動けない。",
+  },
+  {
+    id: "redox-cu-hot-h2so4",
+    name: "銅と熱濃硫酸",
+    formula: "Cu + 2H_2SO_4 \\to CuSO_4 + SO_2 + 2H_2O",
+    type: "redox",
+    ph: "acid",
+    requires: {
+      elements: { Cu: 1, H2SO4: 1 },
+      conditions: ["cond-heat"],
+    },
+    outcome: {
+      damage: 38,
+      produces: ["CuSO4", "SO2"],
+      effect: "smoke",
+      // SO2 (毒) + 反応熱 (燃焼)
+      statusEffects: [
+        { kind: "poison", value: 5, duration: 3 },
+        { kind: "burn", value: 3, duration: 2 },
+      ],
+    },
+    priority: 23,
+    educationalNote:
+      "Cu は希塩酸では反応しないが、酸化力のある熱濃硫酸とは反応して SO₂ を発生。猛毒ガスが敵を蝕む。",
   },
 ];
 

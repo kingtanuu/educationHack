@@ -37,6 +37,7 @@ export const TUTORIAL_DECK: CardDef[] = [
   { id: "tut-h-01", key: "H", kind: "element", rarity: "common", energyCost: 1, soloDamage: 3 },
   { id: "tut-h-02", key: "H", kind: "element", rarity: "common", energyCost: 1, soloDamage: 3 },
   { id: "tut-o-01", key: "O", kind: "element", rarity: "common", energyCost: 1, soloDamage: 4 },
+  { id: "tut-o-02", key: "O", kind: "element", rarity: "common", energyCost: 1, soloDamage: 4 },
   // Salt synthesis (Na + Cl)
   { id: "tut-na-01", key: "Na", kind: "element", rarity: "uncommon", energyCost: 1, soloDamage: 5 },
   { id: "tut-cl-01", key: "Cl", kind: "element", rarity: "uncommon", energyCost: 1, soloDamage: 5 },
@@ -46,6 +47,8 @@ export const TUTORIAL_DECK: CardDef[] = [
   // Gas-formation reactions vs HCl (Zn / Fe / Mg)
   { id: "tut-zn-01", key: "Zn", kind: "element", rarity: "common", energyCost: 1, soloDamage: 4 },
   { id: "tut-mg-01", key: "Mg", kind: "element", rarity: "common", energyCost: 1, soloDamage: 4 },
+  // Sulfur for combustion (poison + burn)
+  { id: "tut-s-01", key: "S", kind: "element", rarity: "common", energyCost: 1, soloDamage: 4 },
   // Combustion condition for big damage combos
   { id: "tut-ignite-01", key: "cond-ignite", kind: "condition", rarity: "common", energyCost: 1, soloDamage: 0 },
   // Aqueous boost for neutralization
@@ -70,6 +73,9 @@ export const STARTER_DECK: CardDef[] = [
   { id: "card-cu-01", key: "Cu", kind: "element", rarity: "uncommon", energyCost: 1, soloDamage: 3 },
   { id: "card-hcl-01", key: "HCl", kind: "element", rarity: "uncommon", energyCost: 1, soloDamage: 6 },
   { id: "card-naoh-01", key: "NaOH", kind: "element", rarity: "uncommon", energyCost: 1, soloDamage: 6 },
+  { id: "card-h2so4-01", key: "H2SO4", kind: "element", rarity: "uncommon", energyCost: 2, soloDamage: 8 },
+  { id: "card-s-01", key: "S", kind: "element", rarity: "common", energyCost: 1, soloDamage: 4 },
+  { id: "card-nh3-01", key: "NH3", kind: "element", rarity: "uncommon", energyCost: 1, soloDamage: 5 },
   { id: "card-cond-ignite-01", key: "cond-ignite", kind: "condition", rarity: "common", energyCost: 1, soloDamage: 0 },
   { id: "card-cond-aqueous-01", key: "cond-aqueous", kind: "condition", rarity: "common", energyCost: 0, soloDamage: 0 },
   { id: "card-cond-heat-01", key: "cond-heat", kind: "condition", rarity: "common", energyCost: 1, soloDamage: 0 },

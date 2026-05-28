@@ -51,6 +51,12 @@ const STATUS_ENTRIES: LegendEntry[] = [
     tint: "border-purple-700/60 bg-purple-950/40",
   },
   {
+    icon: "✨",
+    label: "目眩し / Dazzle",
+    description: "強い閃光で敵の攻撃ダメージを 50% に減衰。マグネシウム燃焼で発動。",
+    tint: "border-yellow-600/70 bg-yellow-900/40",
+  },
+  {
     icon: "💚",
     label: "回復 / Heal",
     description: "プレイヤーの HP を回復。中和反応のオマケで付くことが多い。",

@@ -26,6 +26,7 @@ const STATUS_META = {
   poison: { label: "毒", icon: "☠️", tint: "text-emerald-200" },
   burn: { label: "燃焼", icon: "🔥", tint: "text-orange-200" },
   paralyze: { label: "麻痺", icon: "💫", tint: "text-purple-200" },
+  dazzle: { label: "目眩し", icon: "✨", tint: "text-yellow-200" },
   "block-buff": { label: "強化", icon: "🛡", tint: "text-sky-200" },
 } as const;
 
@@ -61,7 +62,12 @@ const STATUS_LEGEND = [
   {
     icon: "💫",
     label: "麻痺 / Paralyze",
-    description: "敵の次の行動を1ターン無効化。代表例: 塩化銀の沈殿 (粒子が動きを止める)。",
+    description: "敵の次の行動を1ターン無効化。代表例: 塩化銀の沈殿、NH₃+HCl の煙幕。",
+  },
+  {
+    icon: "✨",
+    label: "目眩し / Dazzle",
+    description: "強い閃光で敵の攻撃ダメージを 50% に減衰。代表例: マグネシウムの燃焼 (線香花火)。",
   },
   {
     icon: "💚",

@@ -111,8 +111,12 @@ const STATUS_LABEL: Record<StatusEffectKind, string> = {
   poison: "毒",
   paralyze: "麻痺",
   burn: "燃焼",
+  dazzle: "目眩し",
   "block-buff": "強化",
 };
+
+/** When the enemy has at least one stack of dazzle, attacks deal half. */
+const DAZZLE_DAMAGE_MUL = 0.5;
 
 function cardToPlayed(card: CardDef): PlayedCard {
   if (card.kind === "condition") return { kind: "cond", key: card.key };
@@ -433,11 +437,24 @@ export const useBattleStore = create<BattleState>((set, get) => ({
           state.enemyIntentIndex % (state.enemy?.intentPattern.length ?? 1)
         ];
 
+    // Dazzle halves the enemy's attack damage.
+    const dazzled = nextStatus.some((s) => s.kind === "dazzle");
+
     let pending: PendingEnemyAction | null = null;
     if (intent && intent.kind === "attack") {
-      const blocked = Math.min(state.playerBlock, intent.value);
-      const hpDamage = intent.value - blocked;
-      pending = { id: uid(), intent, hpDamage, blocked };
+      const effectiveAttack = dazzled
+        ? Math.round(intent.value * DAZZLE_DAMAGE_MUL)
+        : intent.value;
+      const blocked = Math.min(state.playerBlock, effectiveAttack);
+      const hpDamage = effectiveAttack - blocked;
+      pending = {
+        id: uid(),
+        intent: dazzled
+          ? { ...intent, value: effectiveAttack, label: `${intent.label} (目眩し)` }
+          : intent,
+        hpDamage,
+        blocked,
+      };
     } else if (intent) {
       pending = { id: uid(), intent, hpDamage: 0, blocked: 0 };
     }
