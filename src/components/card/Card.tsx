@@ -16,8 +16,8 @@ interface CardProps {
 }
 
 const SIZE_CLASSES = {
-  hand: "w-[148px] h-[208px]",
-  play: "w-[120px] h-[170px]",
+  hand: "w-[128px] h-[182px]",
+  play: "w-[108px] h-[150px]",
   preview: "w-[200px] h-[280px]",
 };
 

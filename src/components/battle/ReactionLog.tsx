@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, X, Skull, Info, AlertTriangle } from "lucide-react";
+import { Check, X, Skull, Info, AlertTriangle, Zap } from "lucide-react";
 import type { LogEntry } from "@/lib/game/battleStore";
 import { KaTeX } from "@/components/ui/KaTeX";
 
@@ -9,7 +9,16 @@ interface ReactionLogProps {
   entries: LogEntry[];
 }
 
-const KIND_STYLE = {
+const KIND_STYLE: Record<
+  LogEntry["kind"],
+  {
+    icon: typeof Check;
+    border: string;
+    bg: string;
+    text: string;
+    iconClass: string;
+  }
+> = {
   success: {
     icon: Check,
     border: "border-emerald-700/50",
@@ -44,6 +53,13 @@ const KIND_STYLE = {
     bg: "bg-stone-900/40",
     text: "text-ink-secondary",
     iconClass: "text-ink-muted",
+  },
+  status: {
+    icon: Zap,
+    border: "border-purple-700/60",
+    bg: "bg-purple-950/40",
+    text: "text-purple-100",
+    iconClass: "text-purple-300",
   },
 };
 

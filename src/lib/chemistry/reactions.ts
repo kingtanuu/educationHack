@@ -16,6 +16,23 @@ export type ReactionType =
   | "gas-formation"
   | "decomposition";
 
+/** Acid / base / neutral classification for type-matchup damage. */
+export type ReactionPh = "acid" | "base" | "neutral";
+
+export type StatusEffectKind =
+  | "poison"
+  | "paralyze"
+  | "burn"
+  | "block-buff";
+
+export interface AppliedStatusEffect {
+  kind: StatusEffectKind;
+  /** Magnitude per tick (e.g., poison damage). */
+  value: number;
+  /** Turns this effect lasts. */
+  duration: number;
+}
+
 export interface ReactionRequirements {
   /** Symbols and counts the player must have on the table. */
   elements: Record<string, number>;
@@ -31,6 +48,8 @@ export interface ReactionOutcome {
   produces?: string[];
   /** Visual effect key used by the battle field. */
   effect?: "fire" | "spark" | "fizz" | "smoke" | "crystal" | "color-change";
+  /** Status effects to apply to the enemy on success. */
+  statusEffects?: AppliedStatusEffect[];
 }
 
 export interface ReactionDef {
@@ -39,6 +58,8 @@ export interface ReactionDef {
   /** KaTeX-formatted formula string (no leading $/$$). */
   formula: string;
   type: ReactionType;
+  /** pH category that determines damage matchup against enemy weakness. */
+  ph: ReactionPh;
   requires: ReactionRequirements;
   outcome: ReactionOutcome;
   /** Priority for tie-breaking when multiple reactions match (higher wins). */
@@ -53,6 +74,7 @@ export const REACTIONS: ReactionDef[] = [
     name: "塩化ナトリウムの生成",
     formula: "2Na + Cl_2 \\to 2NaCl",
     type: "synthesis",
+    ph: "neutral",
     requires: { elements: { Na: 1, Cl: 1 } },
     outcome: {
       damage: 28,
@@ -68,6 +90,7 @@ export const REACTIONS: ReactionDef[] = [
     name: "塩酸と水酸化ナトリウムの中和",
     formula: "HCl + NaOH \\to NaCl + H_2O",
     type: "neutralization",
+    ph: "neutral",
     requires: { elements: { HCl: 1, NaOH: 1 } },
     outcome: {
       damage: 14,
@@ -85,11 +108,13 @@ export const REACTIONS: ReactionDef[] = [
     name: "水素の燃焼",
     formula: "2H_2 + O_2 \\to 2H_2O",
     type: "combustion",
+    ph: "neutral",
     requires: { elements: { H: 2, O: 1 }, conditions: ["cond-ignite"] },
     outcome: {
       damage: 36,
       produces: ["H2O"],
       effect: "fire",
+      statusEffects: [{ kind: "burn", value: 4, duration: 2 }],
     },
     priority: 30,
     educationalNote:
@@ -100,21 +125,24 @@ export const REACTIONS: ReactionDef[] = [
     name: "マグネシウムの燃焼",
     formula: "2Mg + O_2 \\to 2MgO",
     type: "combustion",
+    ph: "base",
     requires: { elements: { Mg: 1, O: 1 }, conditions: ["cond-ignite"] },
     outcome: {
       damage: 30,
       produces: ["MgO"],
       effect: "spark",
+      statusEffects: [{ kind: "burn", value: 3, duration: 2 }],
     },
     priority: 25,
     educationalNote:
-      "マグネシウムは強い閃光を放って燃え白い酸化マグネシウムになる。線香花火の原理。",
+      "マグネシウムは強い閃光を放って燃え白い酸化マグネシウム(塩基性酸化物)になる。",
   },
   {
     id: "gas-zn-hcl",
     name: "亜鉛と塩酸の反応",
     formula: "Zn + 2HCl \\to ZnCl_2 + H_2 \\uparrow",
     type: "gas-formation",
+    ph: "acid",
     requires: { elements: { Zn: 1, HCl: 1 } },
     outcome: {
       damage: 18,
@@ -130,6 +158,7 @@ export const REACTIONS: ReactionDef[] = [
     name: "鉄と塩酸の反応",
     formula: "Fe + 2HCl \\to FeCl_2 + H_2 \\uparrow",
     type: "gas-formation",
+    ph: "acid",
     requires: { elements: { Fe: 1, HCl: 1 } },
     outcome: {
       damage: 16,
@@ -145,37 +174,42 @@ export const REACTIONS: ReactionDef[] = [
     name: "塩化銀の沈殿",
     formula: "Ag^{+} + Cl^{-} \\to AgCl \\downarrow",
     type: "precipitation",
+    ph: "neutral",
     requires: { elements: { Ag: 1, Cl: 1 } },
     outcome: {
       damage: 22,
       block: 6,
       produces: ["AgCl"],
       effect: "crystal",
+      statusEffects: [{ kind: "paralyze", value: 1, duration: 1 }],
     },
     priority: 18,
     educationalNote:
-      "銀イオンと塩化物イオンは白色の塩化銀となって沈殿。塩素の検出反応。",
+      "銀イオンと塩化物イオンは白色の塩化銀となって沈殿。沈殿が敵を覆って麻痺させる。",
   },
   {
     id: "redox-cu-hno3",
     name: "銅と希硝酸の反応",
     formula: "3Cu + 8HNO_3 \\to 3Cu(NO_3)_2 + 2NO + 4H_2O",
     type: "redox",
+    ph: "acid",
     requires: { elements: { Cu: 1, HNO3: 1 } },
     outcome: {
       damage: 42,
       produces: ["NO"],
       effect: "smoke",
+      statusEffects: [{ kind: "poison", value: 4, duration: 3 }],
     },
     priority: 22,
     educationalNote:
-      "Cu は H よりイオン化傾向が小さく塩酸では反応しないが、酸化力をもつ希硝酸とは反応する。",
+      "Cu は H よりイオン化傾向が小さく塩酸では反応しないが、酸化力をもつ希硝酸とは反応。NO ガスが毒として残る。",
   },
   {
     id: "synth-nh3",
     name: "ハーバー・ボッシュ法",
     formula: "N_2 + 3H_2 \\to 2NH_3",
     type: "synthesis",
+    ph: "base",
     requires: {
       elements: { N: 1, H: 3 },
       conditions: ["cond-catalyst", "cond-pressure"],
@@ -194,6 +228,7 @@ export const REACTIONS: ReactionDef[] = [
     name: "水の生成 (緩慢)",
     formula: "2H_2 + O_2 \\to 2H_2O",
     type: "synthesis",
+    ph: "neutral",
     requires: { elements: { H: 2, O: 1 } },
     outcome: {
       damage: 12,
@@ -205,6 +240,22 @@ export const REACTIONS: ReactionDef[] = [
       "水素と酸素から水ができる基本反応。点火しなければ常温では遅い。",
   },
 ];
+
+/** Damage multiplier for reaction pH vs enemy weakness. */
+export function phMultiplier(
+  reactionPh: ReactionPh,
+  enemyWeakness: ReactionPh,
+): number {
+  if (reactionPh === "neutral" || enemyWeakness === "neutral") return 1;
+  if (reactionPh === enemyWeakness) return 0.5; // same → resist
+  return 1.7; // opposite → super effective
+}
+
+export function phLabel(ph: ReactionPh): string {
+  if (ph === "acid") return "酸性";
+  if (ph === "base") return "塩基性";
+  return "中性";
+}
 
 /**
  * Reactions that *fail* with a specific educational message.

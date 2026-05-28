@@ -10,7 +10,6 @@ import { KaTeX } from "@/components/ui/KaTeX";
 interface PlayAreaProps {
   cards: CardDef[];
   onCardClick: (id: string) => void;
-  onResolve: () => void;
   disabled?: boolean;
 }
 
@@ -24,7 +23,6 @@ function cardsToPlayed(cards: CardDef[]) {
 export function PlayArea({
   cards,
   onCardClick,
-  onResolve,
   disabled,
 }: PlayAreaProps) {
   const matches = cards.length > 0 ? previewMatches(cardsToPlayed(cards)) : [];
@@ -40,24 +38,18 @@ export function PlayArea({
             ({cards.length} 枚をプレイ中)
           </span>
         </div>
-        <button
-          type="button"
-          disabled={disabled || cards.length === 0}
-          onClick={onResolve}
-          className={`
-            inline-flex items-center gap-1 rounded-full px-4 py-1.5 text-sm font-bold transition
-            ${
-              cards.length === 0 || disabled
-                ? "cursor-not-allowed bg-stone-800 text-ink-muted"
-                : "bg-gradient-to-r from-amber-600 to-orange-600 text-amber-50 shadow-[0_0_18px_rgba(245,158,11,0.4)] hover:from-amber-500 hover:to-orange-500"
-            }
-          `}
-        >
-          反応！
-        </button>
+        {cards.length > 0 && (
+          <div className="text-xs text-ink-muted">
+            右の「反応！」ボタンで発火
+          </div>
+        )}
       </div>
 
-      <div className="flex min-h-[180px] items-center justify-center gap-2">
+      <div
+        className={`flex min-h-[180px] items-center justify-center gap-2 ${
+          disabled ? "pointer-events-none opacity-60" : ""
+        }`}
+      >
         {cards.length === 0 ? (
           <div className="flex flex-col items-center gap-2 text-ink-muted">
             <ChevronUp size={18} />

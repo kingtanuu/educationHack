@@ -2,13 +2,16 @@
 
 import { motion, useAnimationControls } from "framer-motion";
 import { useEffect, useRef } from "react";
-import { Sword, Shield, Sparkles, AlertTriangle } from "lucide-react";
+import { Sword, Shield, Sparkles, AlertTriangle, Target } from "lucide-react";
 import type { EnemyDef, EnemyIntent } from "@/data/enemies";
+import { phLabel } from "@/lib/chemistry/reactions";
 import { HpBar } from "./HpBar";
+import { StatusBadges } from "./StatusBadges";
 import {
   DamageNumberLayer,
   type FloatingNumber,
 } from "@/components/effects/DamageNumber";
+import type { ActiveStatus } from "@/lib/game/battleStore";
 
 interface EnemyPanelProps {
   enemy: EnemyDef;
@@ -16,6 +19,7 @@ interface EnemyPanelProps {
   intent: EnemyIntent | null;
   damageNumbers: FloatingNumber[];
   onDamageNumberExpire: (id: string) => void;
+  status: ActiveStatus[];
 }
 
 const INTENT_ICON = {
@@ -25,12 +29,22 @@ const INTENT_ICON = {
   debuff: AlertTriangle,
 };
 
+const PH_BADGE: Record<string, { label: string; chip: string }> = {
+  acid: { label: "酸性", chip: "border-rose-500 bg-rose-900/60 text-rose-100" },
+  base: { label: "塩基性", chip: "border-sky-500 bg-sky-900/60 text-sky-100" },
+  neutral: {
+    label: "中性",
+    chip: "border-stone-500 bg-stone-800/60 text-ink-secondary",
+  },
+};
+
 export function EnemyPanel({
   enemy,
   hp,
   intent,
   damageNumbers,
   onDamageNumberExpire,
+  status,
 }: EnemyPanelProps) {
   const Icon = intent ? INTENT_ICON[intent.kind] : null;
   const controls = useAnimationControls();
@@ -45,6 +59,9 @@ export function EnemyPanel({
     }
     prevHp.current = hp;
   }, [hp, controls]);
+
+  const phMeta = PH_BADGE[enemy.ph];
+  const weakMeta = PH_BADGE[enemy.weakness];
 
   return (
     <div className="relative flex flex-col items-center gap-3">
@@ -89,8 +106,29 @@ export function EnemyPanel({
           {enemy.name}
         </h2>
         <p className="mt-1 text-[11px] text-ink-muted">{enemy.flavor}</p>
+
+        <div className="mt-2 flex items-center justify-center gap-1.5 text-[10px]">
+          <span
+            className={`rounded-full border px-2 py-0.5 font-bold ${phMeta.chip}`}
+          >
+            {phLabel(enemy.ph)}
+          </span>
+          {enemy.weakness !== "neutral" && (
+            <span
+              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-bold ${weakMeta.chip}`}
+            >
+              <Target size={10} />
+              弱点: {phLabel(enemy.weakness)}
+            </span>
+          )}
+        </div>
+
         <div className="mt-3">
           <HpBar current={hp} max={enemy.maxHp} tint="enemy" />
+        </div>
+
+        <div className="mt-2">
+          <StatusBadges effects={status} />
         </div>
       </div>
     </div>

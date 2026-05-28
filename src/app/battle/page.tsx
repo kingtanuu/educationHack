@@ -3,7 +3,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, ChevronRight, RotateCcw, Volume2, VolumeX } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronRight,
+  FlaskConical,
+  RotateCcw,
+  Volume2,
+  VolumeX,
+} from "lucide-react";
 import { useBattleStore } from "@/lib/game/battleStore";
 import { useRunStore } from "@/lib/game/runStore";
 import { findSynergyHints } from "@/lib/chemistry/reactionEngine";
@@ -14,6 +21,8 @@ import { ReactionLog } from "@/components/battle/ReactionLog";
 import { PlayArea } from "@/components/battle/PlayArea";
 import { Hand } from "@/components/battle/Hand";
 import { EnemyAttackBanner } from "@/components/effects/EnemyAttackBanner";
+import { EffectivenessBanner } from "@/components/effects/EffectivenessBanner";
+import { EffectsLegend } from "@/components/battle/EffectsLegend";
 import type { FloatingNumber } from "@/components/effects/DamageNumber";
 
 const ENEMY_TELEGRAPH_MS = 1300;
@@ -37,6 +46,8 @@ export default function BattlePage() {
   const status = useBattleStore((s) => s.status);
   const phase = useBattleStore((s) => s.phase);
   const pendingEnemyAction = useBattleStore((s) => s.pendingEnemyAction);
+  const enemyStatus = useBattleStore((s) => s.enemyStatus);
+  const lastFx = useBattleStore((s) => s.lastFx);
 
   const startBattle = useBattleStore((s) => s.startBattle);
   const moveToPlayArea = useBattleStore((s) => s.moveToPlayArea);
@@ -179,19 +190,20 @@ export default function BattlePage() {
     }
   }, [resolveReaction]);
 
-  // Victory / defeat audio + run progression.
-  const recordedVictoryRef = useRef<string | null>(null);
+  // Victory / defeat audio + run progression — fire only on the
+  // transition into the end state, not every re-render.
+  const prevStatusRef = useRef(status);
   useEffect(() => {
-    if (status === "victory") {
+    const prev = prevStatusRef.current;
+    if (prev !== "victory" && status === "victory") {
       sfx.play("victory");
-      const tag = `${enemy?.id ?? "?"}-${floorsCleared}`;
-      if (recordedVictoryRef.current !== tag) {
-        recordedVictoryRef.current = tag;
-        recordVictory();
-      }
+      recordVictory();
     }
-    if (status === "defeat") sfx.play("defeat");
-  }, [status, enemy?.id, floorsCleared, recordVictory]);
+    if (prev !== "defeat" && status === "defeat") {
+      sfx.play("defeat");
+    }
+    prevStatusRef.current = status;
+  }, [status, recordVictory]);
 
   const removeEnemyNumber = useCallback(
     (id: string) =>
@@ -263,6 +275,7 @@ export default function BattlePage() {
                   intent={intent}
                   damageNumbers={enemyNumbers}
                   onDamageNumberExpire={removeEnemyNumber}
+                  status={enemyStatus}
                 />
               </div>
             </div>
@@ -270,12 +283,11 @@ export default function BattlePage() {
             <PlayArea
               cards={playArea}
               onCardClick={onCardReturn}
-              onResolve={onResolveReaction}
               disabled={!playerCanAct}
             />
 
             <div className="flex items-end justify-between gap-4">
-              <div className="w-72 shrink-0">
+              <div className="w-60 shrink-0">
                 <PlayerPanel
                   hp={playerHp}
                   maxHp={playerMaxHp}
@@ -297,32 +309,56 @@ export default function BattlePage() {
                 />
               </div>
 
-              <div className="w-72 shrink-0">
-                <button
-                  type="button"
-                  onClick={endTurn}
-                  disabled={!playerCanAct}
-                  className="inline-flex w-full items-center justify-between gap-2 rounded-2xl border-2 border-amber-700/60 bg-gradient-to-r from-amber-700 to-amber-600 px-6 py-3 font-display font-bold text-amber-50 shadow-lg transition hover:from-amber-600 hover:to-amber-500 disabled:opacity-50"
-                >
-                  ターン終了
-                  <ChevronRight size={20} />
-                </button>
+              <div className="w-56 shrink-0">
+                {playArea.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={onResolveReaction}
+                    disabled={!playerCanAct}
+                    className="pulse-glow inline-flex w-full items-center justify-between gap-2 rounded-2xl border-2 border-amber-400 bg-gradient-to-r from-amber-500 to-orange-600 px-6 py-3 font-display font-bold text-amber-50 shadow-[0_0_28px_rgba(245,158,11,0.5)] transition hover:from-amber-400 hover:to-orange-500 disabled:opacity-50"
+                  >
+                    <span className="flex items-center gap-2">
+                      <FlaskConical size={18} />
+                      反応！
+                    </span>
+                    <span className="text-xs font-normal opacity-80">
+                      {playArea.length} 枚
+                    </span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={endTurn}
+                    disabled={!playerCanAct}
+                    className="inline-flex w-full items-center justify-between gap-2 rounded-2xl border-2 border-stone-600 bg-stone-800/80 px-6 py-3 font-display font-bold text-ink-secondary shadow-lg transition hover:border-stone-500 hover:text-ink-primary disabled:opacity-50"
+                  >
+                    ターン終了
+                    <ChevronRight size={20} />
+                  </button>
+                )}
                 {!playerCanAct && phase === "enemy-telegraph" && (
                   <div className="mt-2 text-center text-xs text-rose-300">
                     敵が攻撃を準備中…
+                  </div>
+                )}
+                {playerCanAct && playArea.length === 0 && (
+                  <div className="mt-2 text-center text-[11px] text-ink-muted">
+                    カードを選ぶと「反応！」になる
                   </div>
                 )}
               </div>
             </div>
           </div>
 
-          <div className="w-80 shrink-0">
+          <div className="flex w-72 shrink-0 flex-col gap-3">
+            <EffectsLegend />
             <ReactionLog entries={log} />
           </div>
         </div>
       </div>
 
       <EnemyAttackBanner pending={pendingEnemyAction} enemyName={enemy.name} />
+      <EffectivenessBanner fx={lastFx} />
 
       <AnimatePresence>
         {battleOver && (
