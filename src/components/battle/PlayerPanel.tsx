@@ -4,10 +4,12 @@ import { motion, useAnimationControls } from "framer-motion";
 import { useEffect, useRef } from "react";
 import { Zap } from "lucide-react";
 import { HpBar } from "./HpBar";
+import { StatusBadges } from "./StatusBadges";
 import {
   DamageNumberLayer,
   type FloatingNumber,
 } from "@/components/effects/DamageNumber";
+import type { ActiveStatus } from "@/lib/game/battleStore";
 
 interface PlayerPanelProps {
   hp: number;
@@ -18,6 +20,7 @@ interface PlayerPanelProps {
   turn: number;
   damageNumbers: FloatingNumber[];
   onDamageNumberExpire: (id: string) => void;
+  status: ActiveStatus[];
 }
 
 export function PlayerPanel({
@@ -29,6 +32,7 @@ export function PlayerPanel({
   turn,
   damageNumbers,
   onDamageNumberExpire,
+  status,
 }: PlayerPanelProps) {
   const controls = useAnimationControls();
   const prevHp = useRef(hp);
@@ -77,6 +81,14 @@ export function PlayerPanel({
           ))}
         </div>
       </div>
+      {status.length > 0 && (
+        <div className="rounded-xl border border-rose-700/40 bg-rose-950/30 px-3 py-2">
+          <div className="mb-1 text-[10px] uppercase tracking-wider text-rose-300">
+            自分にかかっている異常
+          </div>
+          <StatusBadges effects={status} />
+        </div>
+      )}
       <DamageNumberLayer
         numbers={damageNumbers}
         onExpire={onDamageNumberExpire}

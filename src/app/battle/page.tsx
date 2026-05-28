@@ -15,6 +15,7 @@ import { useBattleStore } from "@/lib/game/battleStore";
 import { useRunStore } from "@/lib/game/runStore";
 import { findSynergyHints } from "@/lib/chemistry/reactionEngine";
 import { sfx } from "@/lib/audio/sfx";
+import { getFloorEntry, floorEnemyFor } from "@/data/floorPlan";
 import { EnemyPanel } from "@/components/battle/EnemyPanel";
 import { PlayerPanel } from "@/components/battle/PlayerPanel";
 import { ReactionLog } from "@/components/battle/ReactionLog";
@@ -47,6 +48,10 @@ export default function BattlePage() {
   const phase = useBattleStore((s) => s.phase);
   const pendingEnemyAction = useBattleStore((s) => s.pendingEnemyAction);
   const enemyStatus = useBattleStore((s) => s.enemyStatus);
+  const playerStatus = useBattleStore((s) => s.playerStatus);
+  const enemyBlock = useBattleStore((s) => s.enemyBlock);
+  const enemyStrength = useBattleStore((s) => s.enemyStrength);
+  const enemyIntentIndex = useBattleStore((s) => s.enemyIntentIndex);
   const lastFx = useBattleStore((s) => s.lastFx);
 
   const startBattle = useBattleStore((s) => s.startBattle);
@@ -74,11 +79,23 @@ export default function BattlePage() {
   const prevPlayerHp = useRef(playerHp);
   const prevPlayerBlock = useRef(playerBlock);
 
+  const currentFloor = floorsCleared + 1;
+
   useEffect(() => {
     if (status === "idle") {
-      startBattle("acid-slime", snapshotDeck(), runHp, runMaxHp);
+      const scaledEnemy = floorEnemyFor(currentFloor);
+      if (scaledEnemy) {
+        startBattle(scaledEnemy, snapshotDeck(), runHp, runMaxHp);
+      }
     }
-  }, [status, startBattle, snapshotDeck, runHp, runMaxHp]);
+  }, [status, startBattle, snapshotDeck, runHp, runMaxHp, currentFloor]);
+
+  const nextIntent =
+    enemy && status === "in-progress" && phase === "player"
+      ? enemy.intentPattern[
+          (enemyIntentIndex + 1) % enemy.intentPattern.length
+        ]
+      : null;
 
   // Compute synergy hints whenever the hand or crucible changes.
   const synergyKeys = (() => {
@@ -249,9 +266,23 @@ export default function BattlePage() {
             <ArrowLeft size={14} /> タイトルへ
           </Link>
           <div className="text-center">
-            <div className="font-display text-sm tracking-widest text-amber-400">
-              {tutorialComplete ? "第" + (floorsCleared + 1) + "階" : "第1階 — チュートリアル"}
-            </div>
+            {(() => {
+              const entry = getFloorEntry(currentFloor);
+              const label = entry.label
+                ? ` — ${entry.label}`
+                : "";
+              return (
+                <div className="font-display text-sm tracking-widest text-amber-400">
+                  {entry.chapter ?? `第${currentFloor}階`}{label}
+                  {(entry.hpScale !== 1 || entry.damageScale !== 1) && (
+                    <span className="ml-2 text-[10px] text-rose-300">
+                      HP×{entry.hpScale.toFixed(1)} / 攻×
+                      {entry.damageScale.toFixed(1)}
+                    </span>
+                  )}
+                </div>
+              );
+            })()}
             {!tutorialComplete && (
               <div className="text-[10px] text-emerald-400">
                 💡 光っているカードを組み合わせると反応が成立する
@@ -280,7 +311,10 @@ export default function BattlePage() {
                 <EnemyPanel
                   enemy={enemy}
                   hp={enemyHp}
+                  block={enemyBlock}
+                  strength={enemyStrength}
                   intent={intent}
+                  nextIntent={nextIntent}
                   damageNumbers={enemyNumbers}
                   onDamageNumberExpire={removeEnemyNumber}
                   status={enemyStatus}
@@ -305,6 +339,7 @@ export default function BattlePage() {
                   turn={turn}
                   damageNumbers={playerNumbers}
                   onDamageNumberExpire={removePlayerNumber}
+                  status={playerStatus}
                 />
               </div>
 
@@ -404,19 +439,14 @@ export default function BattlePage() {
                   onClick={() => {
                     if (status === "defeat") {
                       beginRun();
-                      // Re-read fresh values after beginRun mutates state.
-                      const fresh = useRunStore.getState();
+                    }
+                    // Re-read fresh values after possible reset.
+                    const fresh = useRunStore.getState();
+                    const nextFloor = fresh.floorsCleared + 1;
+                    const scaled = floorEnemyFor(nextFloor);
+                    if (scaled) {
                       startBattle(
-                        "acid-slime",
-                        fresh.snapshotDeck(),
-                        fresh.playerHp,
-                        fresh.playerMaxHp,
-                      );
-                    } else {
-                      // Victory: carry over current HP from runStore (just healed).
-                      const fresh = useRunStore.getState();
-                      startBattle(
-                        "acid-slime",
+                        scaled,
                         fresh.snapshotDeck(),
                         fresh.playerHp,
                         fresh.playerMaxHp,

@@ -1,19 +1,21 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { Sword, Shield, Sparkles, AlertTriangle } from "lucide-react";
+import { Sword, Shield, Sparkles, AlertTriangle, Droplet } from "lucide-react";
 import type { PendingEnemyAction } from "@/lib/game/battleStore";
+import type { EnemyIntent } from "@/data/enemies";
 
 interface EnemyAttackBannerProps {
   pending: PendingEnemyAction | null;
   enemyName: string;
 }
 
-const ICON_BY_KIND = {
+const ICON_BY_KIND: Record<EnemyIntent["kind"], typeof Sword> = {
   attack: Sword,
   defend: Shield,
   buff: Sparkles,
   debuff: AlertTriangle,
+  drain: Droplet,
 };
 
 export function EnemyAttackBanner({

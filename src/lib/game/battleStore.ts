@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import type { CardDef } from "@/data/cards";
-import { getEnemy, type EnemyDef, type EnemyIntent } from "@/data/enemies";
+import type { EnemyDef, EnemyIntent } from "@/data/enemies";
 import {
   resolvePlay,
   findSynergyHints,
@@ -52,6 +52,20 @@ export interface PendingEnemyAction {
   hpDamage: number;
   /** Amount that will be absorbed by block. */
   blocked: number;
+  /** Number of hits to play out (default 1). */
+  hits: number;
+  /** Enemy block gained on a defend intent. */
+  enemyBlockGain: number;
+  /** Enemy attack-strength buff gained on a buff intent. */
+  strengthGain: number;
+  /** Player status applied on a debuff intent. */
+  appliedToPlayer?: {
+    kind: StatusEffectKind;
+    value: number;
+    duration: number;
+  };
+  /** Drain heal back to the enemy (when kind === 'drain'). */
+  drainHeal: number;
 }
 
 export type BattlePhase = "player" | "enemy-telegraph" | "enemy-executing";
@@ -74,13 +88,19 @@ export interface BattleState {
   status: "idle" | "in-progress" | "victory" | "defeat";
   phase: BattlePhase;
   pendingEnemyAction: PendingEnemyAction | null;
-  /** Active status effects on the enemy (poison, paralyze, burn). */
+  /** Active status effects on the enemy (poison, paralyze, burn, dazzle). */
   enemyStatus: ActiveStatus[];
+  /** Active status effects on the player. */
+  playerStatus: ActiveStatus[];
+  /** Enemy block (temporary defense gained on defend intents). */
+  enemyBlock: number;
+  /** Bonus damage added to every enemy attack. */
+  enemyStrength: number;
   /** Most recent reaction outcome, used for "効果は抜群だ!" banner. */
   lastFx: LastReactionFx | null;
 
   startBattle: (
-    enemyId: string,
+    enemy: EnemyDef,
     deck: CardDef[],
     initialHp?: number,
     maxHp?: number,
@@ -115,6 +135,68 @@ const STATUS_LABEL: Record<StatusEffectKind, string> = {
   "block-buff": "強化",
 };
 
+/** Draw a fresh hand and hand control back to the player. */
+function drawNextTurn(
+  set: (partial: Partial<BattleState>) => void,
+  get: () => BattleState,
+) {
+  const cur = get();
+  let draw = cur.drawPile.slice();
+  let discardPile = cur.discardPile.slice();
+  const newHand: CardDef[] = [];
+  for (let i = 0; i < HAND_SIZE; i++) {
+    if (draw.length === 0) {
+      draw = shuffle(discardPile);
+      discardPile = [];
+    }
+    const c = draw.shift();
+    if (c) newHand.push(c);
+  }
+  // Tick player statuses at the start of the player's new turn.
+  let playerHp = cur.playerHp;
+  let energyPenalty = 0;
+  const nextPlayerStatus: ActiveStatus[] = [];
+  const playerStatusLogs: LogEntry[] = [];
+  for (const s of cur.playerStatus) {
+    if (s.kind === "poison" || s.kind === "burn") {
+      playerHp = Math.max(0, playerHp - s.value);
+      playerStatusLogs.push({
+        id: uid(),
+        turn: cur.turn + 1,
+        kind: "status",
+        text: `あなたは ${STATUS_LABEL[s.kind]} で ${s.value} ダメージ`,
+      });
+    }
+    if (s.kind === "paralyze") {
+      energyPenalty += 1;
+      playerStatusLogs.push({
+        id: uid(),
+        turn: cur.turn + 1,
+        kind: "status",
+        text: `麻痺で Energy −1`,
+      });
+    }
+    const r = s.remaining - 1;
+    if (r > 0) nextPlayerStatus.push({ ...s, remaining: r });
+  }
+  const defeat = playerHp <= 0;
+  set({
+    hand: defeat ? [] : newHand,
+    drawPile: draw,
+    discardPile,
+    playerEnergy: Math.max(0, MAX_ENERGY - energyPenalty),
+    playerBlock: 0,
+    playerHp,
+    playerStatus: nextPlayerStatus,
+    turn: cur.turn + 1,
+    enemyIntentIndex: cur.enemyIntentIndex + 1,
+    phase: "player",
+    pendingEnemyAction: null,
+    status: defeat ? "defeat" : cur.status,
+    log: [...playerStatusLogs, ...cur.log].slice(0, 40),
+  });
+}
+
 /** When the enemy has at least one stack of dazzle, attacks deal half. */
 const DAZZLE_DAMAGE_MUL = 0.5;
 
@@ -142,10 +224,12 @@ export const useBattleStore = create<BattleState>((set, get) => ({
   phase: "player",
   pendingEnemyAction: null,
   enemyStatus: [],
+  playerStatus: [],
+  enemyBlock: 0,
+  enemyStrength: 0,
   lastFx: null,
 
-  startBattle: (enemyId, deck, initialHp, maxHp) => {
-    const enemy = getEnemy(enemyId);
+  startBattle: (enemy, deck, initialHp, maxHp) => {
     if (!enemy) {
       return;
     }
@@ -196,6 +280,9 @@ export const useBattleStore = create<BattleState>((set, get) => ({
       phase: "player",
       pendingEnemyAction: null,
       enemyStatus: [],
+      playerStatus: [],
+      enemyBlock: 0,
+      enemyStrength: 0,
       lastFx: null,
     });
   },
@@ -288,7 +375,11 @@ export const useBattleStore = create<BattleState>((set, get) => ({
       };
     }
 
-    const newEnemyHp = Math.max(0, state.enemyHp - finalDamage);
+    // Apply damage through enemy block first.
+    const enemyBlocked = Math.min(state.enemyBlock, finalDamage);
+    const damageAfterBlock = finalDamage - enemyBlocked;
+    const newEnemyBlock = state.enemyBlock - enemyBlocked;
+    const newEnemyHp = Math.max(0, state.enemyHp - damageAfterBlock);
     const newPlayerHp = Math.min(
       state.playerMaxHp,
       state.playerHp + heal,
@@ -339,6 +430,7 @@ export const useBattleStore = create<BattleState>((set, get) => ({
 
     set({
       enemyHp: newEnemyHp,
+      enemyBlock: newEnemyBlock,
       playerHp: newPlayerHp,
       playerBlock: newPlayerBlock,
       enemyStatus: mergedStatus,
@@ -383,7 +475,7 @@ export const useBattleStore = create<BattleState>((set, get) => ({
     const statusLogs: LogEntry[] = [];
     const enemyName = state.enemy?.name ?? "敵";
     let paralyzed = false;
-    const nextStatus: ActiveStatus[] = [];
+    const nextEnemyStatus: ActiveStatus[] = [];
     for (const s of state.enemyStatus) {
       if (enemyHp <= 0) break;
       if (s.kind === "poison" || s.kind === "burn") {
@@ -406,7 +498,7 @@ export const useBattleStore = create<BattleState>((set, get) => ({
       }
       const newRemaining = s.remaining - 1;
       if (newRemaining > 0) {
-        nextStatus.push({ ...s, remaining: newRemaining });
+        nextEnemyStatus.push({ ...s, remaining: newRemaining });
       }
     }
 
@@ -423,7 +515,7 @@ export const useBattleStore = create<BattleState>((set, get) => ({
         playArea: [],
         discardPile: discard,
         enemyHp: 0,
-        enemyStatus: nextStatus,
+        enemyStatus: nextEnemyStatus,
         status: "victory",
         log: [victoryLog, ...statusLogs, ...state.log].slice(0, 40),
       });
@@ -437,26 +529,94 @@ export const useBattleStore = create<BattleState>((set, get) => ({
           state.enemyIntentIndex % (state.enemy?.intentPattern.length ?? 1)
         ];
 
-    // Dazzle halves the enemy's attack damage.
-    const dazzled = nextStatus.some((s) => s.kind === "dazzle");
+    const dazzled = nextEnemyStatus.some((s) => s.kind === "dazzle");
 
     let pending: PendingEnemyAction | null = null;
-    if (intent && intent.kind === "attack") {
-      const effectiveAttack = dazzled
-        ? Math.round(intent.value * DAZZLE_DAMAGE_MUL)
-        : intent.value;
-      const blocked = Math.min(state.playerBlock, effectiveAttack);
-      const hpDamage = effectiveAttack - blocked;
-      pending = {
-        id: uid(),
-        intent: dazzled
-          ? { ...intent, value: effectiveAttack, label: `${intent.label} (目眩し)` }
-          : intent,
-        hpDamage,
-        blocked,
-      };
-    } else if (intent) {
-      pending = { id: uid(), intent, hpDamage: 0, blocked: 0 };
+    if (intent) {
+      if (intent.kind === "attack") {
+        const hits = Math.max(1, intent.hits ?? 1);
+        const rawPerHit = intent.value + state.enemyStrength;
+        const effPerHit = dazzled
+          ? Math.round(rawPerHit * DAZZLE_DAMAGE_MUL)
+          : rawPerHit;
+        const totalDamage = effPerHit * hits;
+        const blocked = Math.min(state.playerBlock, totalDamage);
+        const hpDamage = totalDamage - blocked;
+        pending = {
+          id: uid(),
+          intent: dazzled
+            ? { ...intent, value: effPerHit, label: `${intent.label} (目眩し)` }
+            : { ...intent, value: effPerHit },
+          hpDamage,
+          blocked,
+          hits,
+          enemyBlockGain: 0,
+          strengthGain: 0,
+          drainHeal: 0,
+        };
+      } else if (intent.kind === "defend") {
+        pending = {
+          id: uid(),
+          intent,
+          hpDamage: 0,
+          blocked: 0,
+          hits: 1,
+          enemyBlockGain: intent.value,
+          strengthGain: 0,
+          drainHeal: 0,
+        };
+      } else if (intent.kind === "buff") {
+        pending = {
+          id: uid(),
+          intent,
+          hpDamage: 0,
+          blocked: 0,
+          hits: 1,
+          enemyBlockGain: 0,
+          strengthGain: intent.value,
+          drainHeal: 0,
+        };
+      } else if (intent.kind === "debuff" && intent.appliesStatus) {
+        pending = {
+          id: uid(),
+          intent,
+          hpDamage: 0,
+          blocked: 0,
+          hits: 1,
+          enemyBlockGain: 0,
+          strengthGain: 0,
+          appliedToPlayer: intent.appliesStatus,
+          drainHeal: 0,
+        };
+      } else if (intent.kind === "drain") {
+        const raw = intent.value + state.enemyStrength;
+        const effective = dazzled ? Math.round(raw * DAZZLE_DAMAGE_MUL) : raw;
+        const blocked = Math.min(state.playerBlock, effective);
+        const hpDamage = effective - blocked;
+        pending = {
+          id: uid(),
+          intent: dazzled
+            ? { ...intent, value: effective, label: `${intent.label} (目眩し)` }
+            : { ...intent, value: effective },
+          hpDamage,
+          blocked,
+          hits: 1,
+          enemyBlockGain: 0,
+          strengthGain: 0,
+          drainHeal: hpDamage,
+        };
+      } else {
+        pending = {
+          id: uid(),
+          intent,
+          hpDamage: 0,
+          blocked: 0,
+          hits: 1,
+          enemyBlockGain: 0,
+          strengthGain: 0,
+          drainHeal: 0,
+        };
+      }
     }
 
     set({
@@ -464,7 +624,7 @@ export const useBattleStore = create<BattleState>((set, get) => ({
       playArea: [],
       discardPile: discard,
       enemyHp,
-      enemyStatus: nextStatus,
+      enemyStatus: nextEnemyStatus,
       phase: paralyzed ? "enemy-executing" : "enemy-telegraph",
       pendingEnemyAction: pending,
       log: [...statusLogs, ...state.log].slice(0, 40),
@@ -472,31 +632,8 @@ export const useBattleStore = create<BattleState>((set, get) => ({
 
     // If paralyzed, skip straight to drawing the next hand without enemy turn.
     if (paralyzed) {
-      // Defer to allow the UI to show the paralysis log briefly.
       setTimeout(() => {
-        const cur = get();
-        let draw = cur.drawPile.slice();
-        let discardPile = cur.discardPile.slice();
-        const newHand: CardDef[] = [];
-        for (let i = 0; i < HAND_SIZE; i++) {
-          if (draw.length === 0) {
-            draw = shuffle(discardPile);
-            discardPile = [];
-          }
-          const c = draw.shift();
-          if (c) newHand.push(c);
-        }
-        set({
-          hand: newHand,
-          drawPile: draw,
-          discardPile,
-          playerEnergy: MAX_ENERGY,
-          playerBlock: 0,
-          turn: cur.turn + 1,
-          enemyIntentIndex: cur.enemyIntentIndex + 1,
-          phase: "player",
-          pendingEnemyAction: null,
-        });
+        drawNextTurn(set, get);
       }, 700);
     }
   },
@@ -510,66 +647,108 @@ export const useBattleStore = create<BattleState>((set, get) => ({
 
     let newPlayerHp = state.playerHp;
     let newBlock = state.playerBlock;
+    let newEnemyHp = state.enemyHp;
+    let newEnemyBlock = state.enemyBlock;
+    let newEnemyStrength = state.enemyStrength;
+    const newPlayerStatus = [...state.playerStatus];
     const enemyLogs: LogEntry[] = [];
 
-    if (pending.intent.kind === "attack") {
+    const intent = pending.intent;
+
+    if (intent.kind === "attack") {
       newBlock = Math.max(0, newBlock - pending.blocked);
       newPlayerHp = Math.max(0, newPlayerHp - pending.hpDamage);
+      const hitText = pending.hits > 1 ? ` × ${pending.hits} hits` : "";
       enemyLogs.push({
         id: uid(),
         turn: state.turn,
         kind: "enemy",
-        text: `${enemyName} の ${pending.intent.label} — ${pending.intent.value} ダメージ${
-          pending.blocked > 0 ? ` (${pending.blocked} 防御)` : ""
-        }`,
+        text: `${enemyName} の ${intent.label}${hitText} — 計 ${
+          intent.value * pending.hits
+        } ダメージ${pending.blocked > 0 ? ` (${pending.blocked} 防御)` : ""}`,
       });
-    } else if (pending.intent.kind === "defend") {
+    } else if (intent.kind === "drain") {
+      newBlock = Math.max(0, newBlock - pending.blocked);
+      newPlayerHp = Math.max(0, newPlayerHp - pending.hpDamage);
+      // Drain heals enemy by hpDamage amount (after block).
+      newEnemyHp = Math.min(
+        state.enemy?.maxHp ?? newEnemyHp,
+        newEnemyHp + pending.drainHeal,
+      );
       enemyLogs.push({
         id: uid(),
         turn: state.turn,
         kind: "enemy",
-        text: `${enemyName} の ${pending.intent.label} — 防御を固めた`,
+        text: `${enemyName} の ${intent.label} — ${intent.value} 吸収 (敵HP +${pending.drainHeal})`,
+      });
+    } else if (intent.kind === "defend") {
+      newEnemyBlock += pending.enemyBlockGain;
+      enemyLogs.push({
+        id: uid(),
+        turn: state.turn,
+        kind: "enemy",
+        text: `${enemyName} の ${intent.label} — 防御 +${pending.enemyBlockGain}`,
+      });
+    } else if (intent.kind === "buff") {
+      newEnemyStrength += pending.strengthGain;
+      enemyLogs.push({
+        id: uid(),
+        turn: state.turn,
+        kind: "enemy",
+        text: `${enemyName} の ${intent.label} — 攻撃力 +${pending.strengthGain}`,
+      });
+    } else if (intent.kind === "debuff" && pending.appliedToPlayer) {
+      const eff = pending.appliedToPlayer;
+      const existing = newPlayerStatus.find((s) => s.kind === eff.kind);
+      if (existing) {
+        existing.value = Math.max(existing.value, eff.value);
+        existing.remaining = Math.max(existing.remaining, eff.duration);
+      } else {
+        newPlayerStatus.push({
+          kind: eff.kind,
+          value: eff.value,
+          remaining: eff.duration,
+        });
+      }
+      enemyLogs.push({
+        id: uid(),
+        turn: state.turn,
+        kind: "enemy",
+        text: `${enemyName} の ${intent.label} — あなたに ${
+          STATUS_LABEL[eff.kind]
+        } ${eff.value} × ${eff.duration}ターン`,
       });
     } else {
       enemyLogs.push({
         id: uid(),
         turn: state.turn,
         kind: "enemy",
-        text: `${enemyName} の ${pending.intent.label}`,
+        text: `${enemyName} の ${intent.label}`,
       });
     }
 
     const defeat = newPlayerHp <= 0;
 
-    // Draw next hand from discard pile if needed.
-    let draw = state.drawPile.slice();
-    let discard = state.discardPile.slice();
-    const newHand: CardDef[] = [];
-    if (!defeat) {
-      for (let i = 0; i < HAND_SIZE; i++) {
-        if (draw.length === 0) {
-          draw = shuffle(discard);
-          discard = [];
-        }
-        const c = draw.shift();
-        if (c) newHand.push(c);
-      }
-    }
-
     set({
-      hand: newHand,
-      drawPile: draw,
-      discardPile: discard,
-      playerEnergy: MAX_ENERGY,
-      playerBlock: defeat ? state.playerBlock : 0,
       playerHp: newPlayerHp,
-      turn: state.turn + 1,
-      enemyIntentIndex: state.enemyIntentIndex + 1,
-      log: [...enemyLogs, ...state.log].slice(0, 30),
+      playerBlock: newBlock,
+      playerStatus: newPlayerStatus,
+      enemyHp: newEnemyHp,
+      enemyBlock: newEnemyBlock,
+      enemyStrength: newEnemyStrength,
+      log: [...enemyLogs, ...state.log].slice(0, 40),
       status: defeat ? "defeat" : state.status,
-      phase: defeat ? "player" : "player",
-      pendingEnemyAction: null,
     });
+
+    if (!defeat) {
+      // Hand drawing + player-side status ticking happens here.
+      drawNextTurn(set, get);
+    } else {
+      set({
+        phase: "player",
+        pendingEnemyAction: null,
+      });
+    }
   },
 
   reset: () => {
@@ -591,6 +770,9 @@ export const useBattleStore = create<BattleState>((set, get) => ({
       phase: "player",
       pendingEnemyAction: null,
       enemyStatus: [],
+      playerStatus: [],
+      enemyBlock: 0,
+      enemyStrength: 0,
       lastFx: null,
     });
   },

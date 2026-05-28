@@ -2,7 +2,15 @@
 
 import { motion, useAnimationControls } from "framer-motion";
 import { useEffect, useRef } from "react";
-import { Sword, Shield, Sparkles, AlertTriangle, Target } from "lucide-react";
+import {
+  Sword,
+  Shield,
+  Sparkles,
+  AlertTriangle,
+  Target,
+  Droplet,
+  Flame,
+} from "lucide-react";
 import type { EnemyDef, EnemyIntent } from "@/data/enemies";
 import { phLabel } from "@/lib/chemistry/reactions";
 import { HpBar } from "./HpBar";
@@ -16,7 +24,10 @@ import type { ActiveStatus } from "@/lib/game/battleStore";
 interface EnemyPanelProps {
   enemy: EnemyDef;
   hp: number;
+  block: number;
+  strength: number;
   intent: EnemyIntent | null;
+  nextIntent: EnemyIntent | null;
   damageNumbers: FloatingNumber[];
   onDamageNumberExpire: (id: string) => void;
   status: ActiveStatus[];
@@ -27,6 +38,7 @@ const INTENT_ICON = {
   defend: Shield,
   buff: Sparkles,
   debuff: AlertTriangle,
+  drain: Droplet,
 };
 
 const PH_BADGE: Record<string, { label: string; chip: string }> = {
@@ -38,15 +50,56 @@ const PH_BADGE: Record<string, { label: string; chip: string }> = {
   },
 };
 
+function IntentChip({
+  intent,
+  strength,
+  faded,
+}: {
+  intent: EnemyIntent;
+  strength: number;
+  faded?: boolean;
+}) {
+  const Icon = INTENT_ICON[intent.kind] ?? Sword;
+  const displayValue =
+    intent.kind === "attack" || intent.kind === "drain"
+      ? intent.value + strength
+      : intent.value;
+  return (
+    <div
+      className={`flex items-center gap-2 rounded-full border px-3 py-1 text-xs ${
+        faded
+          ? "border-stone-700/40 bg-stone-900/40 text-ink-muted"
+          : "border-stone-700 bg-stone-900/80 text-ink-secondary"
+      }`}
+    >
+      <Icon size={14} className="text-rose-400" />
+      <span className="font-bold">{intent.label}</span>
+      {intent.kind === "attack" && (
+        <span className="rounded-full bg-rose-600/90 px-2 py-0.5 font-bold text-rose-50">
+          {displayValue}
+          {intent.hits && intent.hits > 1 ? `×${intent.hits}` : ""}
+        </span>
+      )}
+      {intent.kind === "drain" && (
+        <span className="rounded-full bg-emerald-700/90 px-2 py-0.5 font-bold text-emerald-50">
+          {displayValue}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function EnemyPanel({
   enemy,
   hp,
+  block,
+  strength,
   intent,
+  nextIntent,
   damageNumbers,
   onDamageNumberExpire,
   status,
 }: EnemyPanelProps) {
-  const Icon = intent ? INTENT_ICON[intent.kind] : null;
   const controls = useAnimationControls();
   const prevHp = useRef(hp);
 
@@ -65,22 +118,23 @@ export function EnemyPanel({
 
   return (
     <div className="relative flex flex-col items-center gap-3">
-      {intent && Icon && (
-        <motion.div
-          key={intent.label}
-          initial={{ y: -6, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          className="flex items-center gap-2 rounded-full border border-stone-700 bg-stone-900/80 px-3 py-1 text-xs text-ink-secondary"
-        >
-          <Icon size={14} className="text-rose-400" />
-          <span className="font-bold">{intent.label}</span>
-          {intent.kind === "attack" && (
-            <span className="rounded-full bg-rose-600/90 px-2 py-0.5 font-bold text-rose-50">
-              {intent.value}
-            </span>
-          )}
-        </motion.div>
-      )}
+      <div className="flex flex-col items-center gap-1">
+        {intent && (
+          <motion.div
+            key={intent.label}
+            initial={{ y: -6, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+          >
+            <IntentChip intent={intent} strength={strength} />
+          </motion.div>
+        )}
+        {nextIntent && (
+          <div className="flex items-center gap-1 text-[10px] text-ink-muted">
+            <span>次→</span>
+            <IntentChip intent={nextIntent} strength={strength} faded />
+          </div>
+        )}
+      </div>
 
       <div className="relative">
         <motion.div
@@ -119,6 +173,16 @@ export function EnemyPanel({
             >
               <Target size={10} />
               弱点: {phLabel(enemy.weakness)}
+            </span>
+          )}
+          {block > 0 && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-sky-500 bg-sky-900/60 px-2 py-0.5 font-bold text-sky-100">
+              <Shield size={10} /> {block}
+            </span>
+          )}
+          {strength > 0 && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-amber-500 bg-amber-900/60 px-2 py-0.5 font-bold text-amber-100">
+              <Flame size={10} /> +{strength}
             </span>
           )}
         </div>
